@@ -259,8 +259,11 @@ tbody tr:hover td{background:#f0fdfa}
       </div>
       <div class="card">
         <div class="ctitle"><b>⚡</b> Chấm điểm</div>
-        <p style="font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.6">Sau khi chọn file, nhấn nút bên dưới để AI đọc và chấm tự động.</p>
-        <button class="btn bt" id="gbtn" onclick="runAI()" disabled>🤖 Chấm bài với AI</button>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.6">
+          <strong>🔧 Chế độ demo:</strong> Hiện tại đang dùng dữ liệu mẫu để test. 
+          Để dùng AI thật, cần cấu hình API key.
+        </p>
+        <button class="btn bt" id="gbtn" onclick="runAI()">🤖 Chấm bài với AI (Demo)</button>
         <div class="ebox" id="eb"></div>
         <div class="div">Hoặc nhập thủ công</div>
         <label class="lbl">Điểm TNKQ (tối đa 4)</label>
@@ -306,8 +309,12 @@ tbody tr:hover td{background:#f0fdfa}
 </div>
  
 <script>
-// CẤU HÌNH - THAY API KEY CỦA BẠN VÀO ĐÂY
-const ANTHROPIC_API_KEY = 'your-api-key-here'; // ⚠️ THAY THẾ BẰNG API KEY THẬT
+/* ═══ CẤU HÌNH ═══ */
+// CHẾ ĐỘ: 'demo' hoặc 'api'
+const MODE = 'demo'; // Chuyển thành 'api' khi có key thật
+
+// Thay API key của bạn vào đây khi chuyển sang chế độ api
+const ANTHROPIC_API_KEY = 'sk-ant-api03-...'; // THAY THẾ BẰNG API KEY THẬT
 
 /* ═══ ĐÁP ÁN ═══ */
 const AK={
@@ -317,7 +324,7 @@ const AK={
   "204":{q:{1:"C",2:"A",3:"C",4:"B",5:"A",6:"B",7:"B",8:"B",9:"C",10:"B",11:"A",12:"D",13:"A",14:"C",15:"A",16:"A"},d:{1:{a:"Đ",b:"S",c:"Đ",d:"Đ"},2:{a:"S",b:"Đ",c:"Đ",d:"Đ"},3:{a:"Đ",b:"S",c:"Đ",d:"Đ"}}}
 };
  
-let curFiles = []; // Mảng lưu các file ảnh
+let curFiles = [];
 let curRes = null;
 let CL = JSON.parse(localStorage.getItem('cl_tin12')||'[]');
  
@@ -326,7 +333,6 @@ const fi = document.getElementById('fi');
 const fz = document.getElementById('fzone');
 const pbox = document.getElementById('pbox');
 
-// Xử lý khi chọn file từ input
 fi.addEventListener('change', function(e){
   if(this.files && this.files.length > 0) {
     curFiles = Array.from(this.files).filter(f => f.type.startsWith('image/'));
@@ -339,12 +345,10 @@ fi.addEventListener('change', function(e){
       curFiles = curFiles.slice(0,4);
     }
     updateImageGallery();
-    document.getElementById('gbtn').disabled = false;
     setErr('');
   }
 });
 
-// Drag and drop hỗ trợ nhiều file
 fz.addEventListener('dragover', e => {e.preventDefault(); fz.classList.add('ok');});
 fz.addEventListener('dragleave', e => {if(!fz.contains(e.relatedTarget)) fz.classList.remove('ok');});
 fz.addEventListener('drop', e => {
@@ -355,14 +359,12 @@ fz.addEventListener('drop', e => {
     curFiles = files.slice(0,4);
     if(files.length > 4) setErr('Chỉ hỗ trợ tối đa 4 ảnh');
     updateImageGallery();
-    document.getElementById('gbtn').disabled = false;
     setErr('');
   } else {
     setErr('Vui lòng thả file ảnh (JPG/PNG)');
   }
 });
 
-// Cập nhật gallery ảnh
 function updateImageGallery() {
   pbox.style.display = 'block';
   pbox.innerHTML = `
@@ -386,8 +388,10 @@ function updateImageGallery() {
   fz.classList.add('ok');
 }
 
-// Xóa ảnh khỏi danh sách
 function removeImage(index) {
+  if(curFiles[index]) {
+    URL.revokeObjectURL(curFiles[index]);
+  }
   curFiles.splice(index, 1);
   if(curFiles.length === 0) {
     resetG();
@@ -407,23 +411,97 @@ function go(t){
   if(t==='keys') renderKeys();
 }
  
-/* ═══ AI GRADE - HỖ TRỢ NHIỀU ẢNH ═══ */
+/* ═══ TẠO DỮ LIỆU MẪU (DEMO) ═══ */
+function generateDemoResult(code, key) {
+  // Tạo đáp án mẫu (giả lập AI đọc được 80% câu đúng)
+  const p1 = {};
+  for(let i = 1; i <= 16; i++) {
+    // 80% câu đúng, 20% câu sai
+    if(Math.random() < 0.8) {
+      p1[i] = key.q[i];
+    } else {
+      const options = ['A', 'B', 'C', 'D'];
+      const wrong = options.filter(opt => opt !== key.q[i]);
+      p1[i] = wrong[Math.floor(Math.random() * wrong.length)];
+    }
+  }
+  
+  const p2 = {};
+  for(let c = 1; c <= 3; c++) {
+    p2[c] = {};
+    ['a','b','c','d'].forEach(y => {
+      // 75% ý đúng
+      if(Math.random() < 0.75) {
+        p2[c][y] = key.d[c][y];
+      } else {
+        p2[c][y] = key.d[c][y] === 'Đ' ? 'S' : 'Đ';
+      }
+    });
+  }
+  
+  // Điểm tự luận ngẫu nhiên từ 1.5 đến 3
+  const tl = +(1.5 + Math.random() * 1.5).toFixed(1);
+  
+  // Tính điểm
+  let okCount = 0;
+  for(let i = 1; i <= 16; i++) {
+    if(p1[i] === key.q[i]) okCount++;
+  }
+  const s1 = +(okCount * 0.25).toFixed(2);
+  
+  let s2 = 0;
+  for(let c = 1; c <= 3; c++) {
+    let oks = 0;
+    ['a','b','c','d'].forEach(y => {
+      if(p2[c][y] === key.d[c][y]) oks++;
+    });
+    s2 += oks * 0.25;
+  }
+  s2 = +s2.toFixed(2);
+  
+  const s3 = +tl.toFixed(2);
+  const tot = +(s1 + s2 + s3).toFixed(1);
+  
+  return {
+    code, p1, p2, s1, s2, s3, tot,
+    nx: "Học sinh nắm vững kiến thức cơ bản, trình bày rõ ràng. Cần cải thiện tốc độ làm bài.",
+    manh: "Trả lời đúng nhiều câu TNKQ, hiểu bài tốt.",
+    yeu: "Một số câu trắc nghiệm đúng/sai còn nhầm lẫn, cần ôn tập kỹ hơn."
+  };
+}
+
+/* ═══ AI GRADE ═══ */
 async function runAI(){
   if(!curFiles || curFiles.length === 0) {
     setErr('Vui lòng chọn ít nhất 1 ảnh bài làm.');
     return;
   }
   setErr('');
-  load(true, 'AI đang đọc bài làm...');
   
   const btn = document.getElementById('gbtn');
   btn.disabled = true;
-  btn.textContent = '⏳ Đang chấm...';
+  btn.textContent = '⏳ Đang xử lý...';
   
   const code = document.getElementById('sm').value;
   const key = AK[code];
   
   try {
+    load(true, 'Đang xử lý bài làm...');
+    
+    // Demo mode - tạo dữ liệu mẫu
+    if(MODE === 'demo') {
+      await new Promise(resolve => setTimeout(resolve, 1500)); // Giả lập thời gian xử lý
+      curRes = generateDemoResult(code, key);
+      renderRes(curRes, key);
+      load(false);
+      return;
+    }
+    
+    // API mode - cần API key hợp lệ
+    if(!ANTHROPIC_API_KEY || ANTHROPIC_API_KEY === 'sk-ant-api03-...') {
+      throw new Error('Vui lòng cấu hình API key trong code (dòng 355) và chuyển MODE thành "api"');
+    }
+    
     // Chuyển đổi tất cả ảnh sang base64
     const imagesBase64 = await Promise.all(curFiles.map(f => toB64(f)));
     
@@ -444,7 +522,6 @@ TNKQ (16 câu): ${JSON.stringify(key.q)}
 }
 Dùng "?" nếu không đọc được câu trả lời.`;
  
-    // Tạo content với nhiều ảnh
     const content = [{type:'text', text: prompt}];
     for(let i = 0; i < imagesBase64.length; i++) {
       content.push({
@@ -514,23 +591,23 @@ Dùng "?" nếu không đọc được câu trả lời.`;
         const sv = (sc[y] || '').trim();
         if(sv && sv !== '?' && sv === kc[y]) oks++;
       });
-      s2 += oks * 0.25; // Mỗi ý đúng 0.25 điểm
+      s2 += oks * 0.25;
     }
     s2 = +s2.toFixed(2);
     
-    // Điểm tự luận
     const s3 = +Math.min(3, Math.max(0, +(r.tl || 0))).toFixed(2);
     const tot = +(s1 + s2 + s3).toFixed(1);
  
     curRes = {code, p1, p2, s1, s2, s3, tot, nx: r.nx || '—', manh: r.manh || '—', yeu: r.yeu || '—'};
     renderRes(curRes, key);
+    
   } catch(e) {
     setErr('❌ ' + e.message);
     console.error(e);
   } finally {
     load(false);
     btn.disabled = false;
-    btn.textContent = '🤖 Chấm bài với AI';
+    btn.textContent = '🤖 Chấm bài với AI (Demo)';
   }
 }
  
@@ -579,7 +656,6 @@ function manG(){
   let p2 = +document.getElementById('m2').value || 0;
   let p3 = +document.getElementById('m3').value || 0;
   
-  // Giới hạn điểm
   p1 = Math.min(4, Math.max(0, p1));
   p2 = Math.min(3, Math.max(0, p2));
   p3 = Math.min(3, Math.max(0, p3));
@@ -606,14 +682,12 @@ function saveStu(){
   const sbd = document.getElementById('sb').value.trim() || '—';
   const code = curRes.code;
   
-  // Kiểm tra trùng
   const existingIndex = CL.findIndex(s => s.name === name && s.code === code);
   
   if(existingIndex !== -1) {
     if(!confirm(`Học sinh ${name} (mã đề ${code}) đã có trong danh sách. Cập nhật điểm mới?`)) {
       return;
     }
-    // Cập nhật
     CL[existingIndex] = {
       ...CL[existingIndex],
       cls, sbd, code,
@@ -621,7 +695,6 @@ function saveStu(){
       time: new Date().toLocaleString('vi-VN')
     };
   } else {
-    // Thêm mới
     CL.push({
       name, cls, sbd, code,
       p1: curRes.s1, p2: curRes.s2, p3: curRes.s3, total: curRes.tot,
@@ -635,6 +708,10 @@ function saveStu(){
 }
  
 function resetG(){
+  // Giải phóng URL objects
+  curFiles.forEach(f => {
+    if(f && f.url) URL.revokeObjectURL(f.url);
+  });
   curFiles = [];
   curRes = null;
   fi.value = '';
@@ -643,7 +720,6 @@ function resetG(){
   pbox.style.display = 'none';
   pbox.innerHTML = '';
   document.getElementById('rw').classList.remove('on');
-  document.getElementById('gbtn').disabled = true;
   document.getElementById('m1').value = '';
   document.getElementById('m2').value = '';
   document.getElementById('m3').value = '';
